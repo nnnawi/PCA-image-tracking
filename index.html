@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="styles.css">
+    <script src="page-updater.js"></script>
+    <script src="libraries/p5.min.js"></script>
+    <script src="libraries/load-mathjax.js" async></script>
+    <script src="main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/9.5.1/math.min.js" integrity="sha512-7+fUzDKxopLeVKiXTdoQQZBl6Zh9Bbl/NrZoowiddStpj7GXTUCM+LOPay4Wzxz14HazsoSsO96UFvvZqAH5rw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap" rel="stylesheet">
+    <title>Document</title>
+</head>
+<body>
+    <div class="header" style="background:#067790;width:100%;height:200px;margin-bottom:50px;display:flex;flex-direction: column;justify-content: center;align-items: center;font-family: Open Sans;">
+        <h1 style="letter-spacing: -1px;padding-bottom: 6px;font-size: 35px;color: #fff;">Track an object's direction using PCA</h1>
+        <h2 style="font-weight: 400;color: hsl(202, 85%, 87%);">Iwan Bnlf's Github</h2>
+    </div>
+    <div class="blog_wrapper">
+        <div class="introduction_wrapper">
+            <h2>Introduction</h2>
+            <p style="font-style:italic;color:#3d3d3d">
+                "It all begins with a simple picture and its subject. The later, lost in the image can't seem to find its direction. 
+                As it yells for help, a bold hero emerges from the land of mathematics to rescue him, and his name was PCA."
+            </p>
+            <p>
+                All jokes aside, Mathematics tends to have a beautiful relationship with image processing, and PCA & image tracking is one remarquable example. 
+                In today's post, we'll try to understand the intuition behind PCA and its application in image processing to find an object's direction.
+            </p>
+        </div>
+        
+        <div class="isolating_pixel" style="position: relative;">
+            <h2>Isolating the relevant data</h2>
+            <p>Let set our problem in the middle of a parking lot with one parked red car.</p>
+            <img src="Pictures/red_car.jpg" style="width:60%;height:60%;position:relative;margin-left:50%;transform:translate(-50%);padding: 15px 0 15px 0;">
+            <p>Our goal here is to find this car's direction and position and further, track those 2 values over time (if we take 
+                a video of the moving car as an input)
+            </p>
+
+            <p>Therefore, our first task would be to isolate the pixels that are meaningful to us, here the car's pixel. There exist many methods to do so,
+                like <a href="https://en.wikipedia.org/wiki/Otsu%27s_method">Otsu Thresholding</a>, <a href="https://en.wikipedia.org/wiki/K-means_clustering">K-Segmentation</a>, <a href="https://en.wikipedia.org/wiki/Canny_edge_detector">Canny Edge Detector</a>, or even <a href="https://en.wikipedia.org/wiki/Blob_detection">Blob Detection</a>.
+                The only issue with these algorithms is that we still have to manually point which part among the isolated parts is the one we want to track. This can be easily overcomed with any kind of classification algorithms. (link to lipton or AI classifier)
+            </p>
+
+            <p>
+                However, if we take as an input a video where the background is static, isolating the moving element can be easily done with the algorithm described below.
+            </p>
+
+            <img src="Pictures/two_cars.gif" style="width:75%;height:75%;position:relative;margin-left:50%;transform:translate(-50%);padding: 15px 0 5px 0;">
+
+            <button type="button" class="collapsible">Video Isolating Algorithm</button>
+            <div class="content" style="display: none;">
+                If our input is a video composed of \(n\) frames, we can refer to each of those frames by \(F_{i, \ i \in [ 1,n]}\). First, we convert each frame to their grayscale value \(G_i\) using the following formula:
+                $$  
+                \normalsize{
+                \begin{gather}
+                G_i(x,y) = 0.2126 \cdot R(F_i(x,y)) + 0.7152 \cdot G(F_i(x,y)) + 0.0722 \cdot B(F_i(x,y)) \\
+                x \in [1,width], \quad y \in [1,height]
+                \end{gather}
+                }
+                $$
+
+                Now, to compute the motion \(M_i\) between 2 following frames, we only have to compute their absolute difference pixel by pixel:
+                $$
+                M_i = │G_{i+1} - G_i│
+                $$
+
+                Finally to remove noise and keep the most relevant values, a simple threshold method can be applied to find our motion regions \(R_i\):
+                \begin{equation}
+                R_i(x,y) = 
+                    \begin{cases}
+                        M_i(x,y), \quad  M_i(x,y) > t \\
+                        0, \quad M_i(x,y) \leq t
+                    \end{cases}
+                \end{equation}
+            </div>
+        </div>
+        
+        <div class="covariance_wrapper">
+            <h2>What is covariance, and what does it tells us ?</h2>
+                <p>Before going any further, we need to introduce and understand some very useful statistical tools.</p>
+                <h3>Variance</h3>
+                <p>
+                    Let say you are looking at the grades students got at their last exam. Those grades are saved in a 1D-array, which you can plot on a single line.
+                </p>
+                <img src="Pictures/grade_1.png" style="width:60%;height:60%;position:relative;margin-left:50%;transform:translate(-50%);padding: 10px;">
+                <p>
+                    Now we ask ourselves the following question: how can we compute how well the students performed on this test ? The first idea would be to compute the grade's mean value with the following formula.
+                </p>
+                <span>$$\large{\bar{x} = \frac{1}{n}\sum_{i = 1}^n x_i}$$</span>
+                <p>
+                    However, this value isn't relevant enough on itself to display how well the students performed because the same mean can be obtained by those two very different distributions:         
+                </p>
+                <img src="Pictures/grade_2.png" style="width:60%;height:60%;position:relative;margin-left:50%;transform:translate(-50%);padding: 10px">
+                <p>
+                    So, to really get a picture of the classroom's performance, you also need to compute how the grades distribute around the mean value: that is Variance.
+                </p>
+                <span>
+
+                    $$\large{Var(X) = \color{orange}\frac{1}{n} \color{green}\sum_{i = 1}^{n} \color{red}   (\bar{x} - x_i)\color{blue}^2}$$
+                </span>
+                <p style="padding-bottom: 20px">
+                    To construct variance, we compute for each point its <span style="color:#ff0000;font-style: italic;font-weight: bold;">"error" relative to the mean value</span>. We then <span style="color: blue;font-style: italic;font-weight: bold;">square</span> this new value and <span style="color: green;font-style:italic;font-weight: bold;">sum</span> them. Squaring the error of each values first assure that all the terms are positive (and thus that none of them
+                    are going to cancel each other out), but mostly, it allows to "penalize" the biggest errors.
+                    Finally, we <span style="color:orange;font-style: italic;font-weight: bold;">divide the total by the number of points</span> in the array.
+                </p>
+
+                <h3>Covariance</h3>
+                <p>
+                    Now, let's say that you are looking at two sets of data that are linked, for instance the age of a person and the amount of money they spend on groceries.
+                    Those data can be saved in a 2D-array, or ploted on a 2D plane.
+                </p>
+                <img src="Pictures/money_age.png" style="width:65%;height:65%;position:relative;margin-left:50%;transform:translate(-50%);padding: 10px">
+                <p>
+                    If variance told you how the values distributed around their mean value, then covariance of distributions \(X\) & \(Y\) tells you how variations in distribution \(X\) affects distribution \(Y\)(and vice-versa).
+                </p>
+                <div style="display:flex;flex-direction:column;align-items: center;">
+                    <span style="font-family: Roboto;font-size:18px;font-weight:400;padding:15px 0 15px 0">↓ Draw a distribution below and watch its covariance ↓</span>
+                    <div class="covariance_p5_wrapper" style="display:flex; flex-direction: row">
+                        <div id="computing_covariance"></div>
+                        <div style="display:flex;flex-direction:row;align-items: center;margin-left:15px">
+                            <span>$$ \large Cov = $$</span>
+                            <span id="covariance_output" style="font-size: 21px;padding-left:8px"></span>
+                        </div>
+                    </div>
+                    <div style></div>
+                    <button style="margin-top:10px" onclick="reset_covariance_boolean = true">Reset</button>
+                </div>
+                
+                <p>
+                    Covariance formula doesn't really differ from variance's one, only that instead of squaring each error term for one distribution; for each point, we multiply the \(X\) error term with \(Y\)'s error term.
+                </p>
+                <span>
+                    $$\large{Cov(X,Y) = \frac{1}{n}\sum_{i = 1}^{n}(\bar{x} - x_i)(\bar{y} - y_i)}$$
+                </span>
+
+                <p>
+                    Silly but important fact: \(Var(X) = Cov(X,X)\)
+                </p>
+        </div>
+        
+        <div class="linear_algebra_class">
+            <h2>Computing the direction</h2>
+            <p>
+                Now, let's go back to our red car in a parking lot picture. What we want to compute is the direction and position of this cloud of pixels. But now that we know about variance and covariance, we can consider that cloud of pixels to be two joint distributions (the distribution
+                of the x-coordinates, and the one of the y-coordinates). Therefore, computing their variances and covariances will tell us how a change in the x-axis distribution affects the y-axis distribution (and vice versa), which is another way to formulate a direction !
+            </p>
+
+            <p>
+                So now the problem boils down to: how to compute the direction of our "pixel blob" only from variance and covariance ?
+            </p>
+
+            <h3>The power of linear algebra</h3>
+            <p>The answer is to "throw" our covariances into a matrix and compute its eigenvectors. If you are not familiar with linear algebra, those words
+                might seem overwhelming; and if you  are, you might not see the intuition behind the process. In both cases, the next paragraphs will explain everything.
+            </p>
+            <h4>Matrices & linear maps</h4>
+            <p>
+                A matrix can be written as an array of values. Matrices can be of any shape but the most common and useful ones are square matrices. Here, we will only look at 2x2 matrices.
+            </p>
+            <span>
+                $$\large{
+                \begin{pmatrix}
+                a & b \\ c & d
+                \end{pmatrix}
+                }$$
+
+                $$\textrm{Example of a simple 2 by 2 square matrix}$$
+            </span>
+            <p>
+                Now, let's picture a 2D-plane where vectors can be drawn. These vector can be represented as a 2-by-1 array containing their \(x\) and \(y\) coordinates.
+                But most importantly, you can think of each points of the plane as being the vector going from \((0,0)\) to its coordinates.
+            </p>
+            <p>
+                Now if you want, you can create a function (or linear map) \(f\) that takes as an input a vector \(V\) and gives as an output \(f(V)\):
+            </p>
+            <span>
+                \begin{gather}
+                \large
+                f : (x,y) \rightarrow 
+                \begin{pmatrix}
+                x + y \\
+                2x - 3y
+                \end{pmatrix}
+                \end{gather}
+            </span>
+            <button class="collapsible">Further explanations</button>
+            <div class="content" style="display: none;">
+                Before discussing vectors and matrices, we must introduce first the <a href="https://en.wikipedia.org/wiki/Vector_space">vector space</a> in which we will work. Here, we pick \(\mathbb{R}^2\) meaning that the elements of our 
+                vector space are "2D-vectors":
+                $$
+                \text{let } v \in \mathbb{R}^2, v = 
+                \begin{pmatrix}
+                v_1 \\ v_2
+                \end{pmatrix}, (v_1,v_2) \in \mathbb{R} \times \mathbb{R}
+                $$
+
+                Just like vectors, linear maps also have a formal definition: let \(E\) and \(F\) be two vector space, and \(f:E \rightarrow F\) a function. \(f\) is a linear map if:
+                \begin{gather}
+                \forall x,y \in \mathbb{E}, \quad \forall \alpha,\beta \in \mathbb{C} \\
+                f(\alpha x + \beta y) = \alpha f(x) + \beta f(y)
+                \end{gather}
+            </div>
+
+            <p>
+                While this definition of a linear map works very well, another way to represent it is by building one of its representative matrices.
+            </p>
+            <span>
+                $$ 
+                \text{Let } B = (x_1,x_2) \ \text{where } x_1 = 
+                \begin{pmatrix}
+                1 \\ 0
+                \end{pmatrix},
+                x_2 = 
+                \begin{pmatrix}
+                0 \\ 1
+                \end{pmatrix}
+                $$
+                $$
+                A = (f(x_1),f(x_2)) = 
+                \begin{pmatrix}
+                1 & 1 \\
+                2 & -3
+                \end{pmatrix}
+                $$
+            </span>
+            <button class="collapsible">Further explanations</button>
+            <div class="content" style="display:none">
+                Let \(E\) be a vector space such that \(dim(E) = n_{(n \in \mathbb{N})}\), and let \(V = (v_i)_{i \in [1,n]}\) be a basis of \(E\). The fact that \(V\) is a basis of \(E\) means in particular that:
+                $$
+                \forall v \in E, \exists (\alpha_1, \alpha_2, ..., \alpha_n) \in \mathbb{C}^n, \quad v = \alpha_1 v_1 + ... + \alpha_n v_n
+                $$
+                Now, that everything is clearly defined, we can introduce the concept of representative matrix. Let \(f:E \rightarrow E\) be a linear map. A simpler and more universal way to represent \(f\) is by computing one of its representative matrices.
+                I specify here <span style="font-weight: 600;">"one of its representative matrices"</span> because every representative matrix is linked with one and only one basis of \(E\).
+
+                <p style="padding-bottom: 0;">
+                    Therefore, the representative matrix \(F\) of \(f\) in the \(V\) basis is defined as followed:
+                    $$
+                    F = Mat_V(f) = (f(v_1),...,f(v_2))
+                    $$
+                    Moreover, if we have \(F\) and \(F'\) two different representative matrices of \(f\), the two matrices are linked by the following formula:
+                    \begin{gather}
+                    F = P_V^{V'} \cdot F' \\
+                    \small{
+                    V,V' \in E^n, \quad F = Mat_V(f), \quad F'=Mat_V'(f)
+                    } 
+                    \end{gather}
+                    Where \(P_V^{V'}\) is the transfer matrice between the basis \(V\) and \(V'\). This matrix only express each vectors of the basis \(V\) as a linear combination of the vectors of the basis \(V'\).
+                </p>
+            </div>
+
+            <p>
+                So now, to compute the output of a vector throught the linear map \(f\), you only have to multiply the vector by the linear map's representative matrix:
+            </p>
+            <span>
+                \begin{gather}
+                \large 
+                \text{Let } v \in E, \text{ then: }
+                A \cdot v = f(v)
+                \end{gather}
+            </span>
+            <p>
+                Therefore, matrices can be thougt of as transformation operators that can shift an "object" shape and orientation.
+            </p>
+            <span style="font-family: Roboto;font-size:18px;font-weight:400;display: flex;justify-content: center;">↓ Change the matrix and watch the shape change ↓</span>
+            <div id="apply_matrix_wrapper" style="display:flex;flex-direction:row;padding: 15px 0 20px 0">
+                <div id="apply_matrix"></div>
+                <div style="width:100vw;display:flex;flex-direction:column;justify-content: center;align-items: center;">
+                    <div style="display: flex;flex-direction: column;" class="matrix_wrapper">
+                        <div style="display: flex;flex-direction: row;">
+                            <input id="a1" type="text" value="2">
+                            <input id="b1" type="text" value="0">
+                        </div>
+                        <div style="display: flex;flex-direction: row;">
+                            <input id="c1" type="text" value="0">
+                            <input id="d1" type="text" value="1">
+                        </div>
+                    </div>
+                    <button class="apply" style="margin-top:15px">Apply matrix</button>
+                    <button class="reset" style="margin-top:10px">Reset circle</button>
+                </div>
+            </div>
+            <h4>Eigenvectors and diagonalizable matrices</h4>
+            <p>
+                But now, what are eigenvectors? Well eigenvector are defined by the following expression:
+            </p>
+            <span>
+                    $$\large{
+                    \begin{gather}
+                    A \cdot V = \lambda V \\
+                    V \in \mathbb{R}^n \setminus \{0\}, \quad A \in \mathcal{M}_{n,n}, \quad \lambda \in \mathbb{C}
+                    \end{gather}}$$
+            </span>
+            <p>
+                If \(V\) is a non-null eigenvector of the matrix \(A\), and \(\lambda \) a real or complex value, then passing \(V\) througt \(A\) doesn't change \(V\)'s orientation
+                but only its magnitude and direction by a factor of \(\lambda\), which we call an eigenvalue.
+            </p>
+            <p>
+                Now, if we take back the example above and we decide to highlight in red the eigenvectors of the matrix, we can see that they are the only vectors that do not move but only extend.
+            </p>
+
+            <span style="font-family: Roboto;font-size:18px;font-weight:400;display: flex;justify-content: center;padding-top: 10px">↓ Change the matrix and watch the eigenvectors ↓</span>
+            <div id="apply_matrix_arrow_wrapper" style="display: flex;flex-direction: row; padding: 15px 0 20px 0">
+                <div id="apply_matrix_arrow"></div>
+                <div style="display: flex;flex-direction:column;justify-content: center;align-items: center;width: 100vw;">
+                    <div style="display: flex;flex-direction: column;" class="matrix_wrapper">
+                        <div style="display: flex;flex-direction: row;">
+                            <input id="a2" type="text" value="2">
+                            <input id="b2" type="text" value="0">
+                        </div>
+                        <div style="display: flex;flex-direction: row;">
+                            <input id="c2" type="text" value="0">
+                            <input id="d2" type="text" value="1">
+                        </div>
+                    </div>
+                    <button class="apply" style="margin-top:15px">Apply matrix</button>
+                    <button class="reset" style="margin-top:10px">Reset circle</button>
+                    <div style="margin-top: 10px;">
+                        <input type="range" id="speed" name="speed" min="1" max="10" onchange="animation_speed=this.value">
+                        <label for="speed" style="font-family: Roboto;font-size: 14px;">Speed</label>
+                    </div>
+                    <div style="margin-top: 10px">
+                        <input type="checkbox" id="eigenvectors" name="eigenvectors" onclick="eigenvectors_check = !eigenvectors_check">
+                        <label for="eigenvectors" style="font-family: Roboto;font-size: 14px;">Show Eigenvectors</label>
+                    </div>
+                </div>
+            </div>
+            
+            <h4>The spectral theorem</h4>
+            <p>
+                One last important fact about square matrices is what we call the spectral theorem. This theorem states:
+                \begin{gather}
+                \text{Every real symmetric matrices are diagonalizable} \\
+                \text{and their eigenvectors are 2 by 2 orthogonal}
+                \end{gather}
+            </p>
+            <button class="collapsible">Further explanations</button>
+            <div class="content" style="display:none">
+                To get a broader understanding of the Spectral Theorem, we will first define all the terms used above.
+                First, the formal definition of a symmetric matrix is the following : if $A$ is a symmetrix matrix, then:
+                \begin{gather}
+                A = A^\intercal
+                \end{gather}
+                Second, a matrix $A$ is called diagonalizable if the eigenvectors of $A$ form a base of $E$  ($E$ being the vector space in in which $A$ is "defined").
+                <p>
+                    Finally, two distinct vector $v$ and $u$ are orthogonal if:
+                    \begin{gather}
+                        \langle u , v \rangle = 0
+                    \end{gather}
+                    In two dimensions, this relation means that the two vectors are perpendicular.
+                </p>
+            </div>
+            <p>
+                To put it in a nutshell, this means that every real symmetric matrices have eigenvectors and especially that those vectors are orthogonal, and that the matrix transform the space along those eigenvectors.
+            </p>
+            <h3 style="padding-top: 20px">Putting it all together</h3>
+            <p>
+                Now, let's go back to our variance and covariance. Like we've seen before, variance and covariance tells us how a cloud of point is shaped. Thus, thanks to our understanding of linear algebra, we can define the covariance matrix as followed:
+            </p>
+            <span>
+                $$
+                \large{
+                C_{X,Y} = 
+                \begin{pmatrix}
+                Cov(X,X) & Cov(X,Y)\\
+                Cov(Y,X) & Cov(Y,Y)
+                \end{pmatrix} = 
+                \begin{pmatrix}
+                Cov(X,X) & Cov(X,Y)\\
+                Cov(X,Y) & Cov(Y,Y)
+                \end{pmatrix}}
+                $$
+            </span>
+            <p>
+                This covariance matrix can be thought as the transformation that will "shape any circle distribution" into the distribution that defined the covariance matrix.
+            </p>
+            <button class="collapsible">Further explanations</button>
+            <div class="content" style="display:none">
+                Let's denote $D$ our circle distribution (meaning all the vector that compose the circle) and $T$ the matrix that will transform the circle distribution into the target distribution $D'$.
+                What we would like is to decompose $T$ as the product of a rotation matrix $R$ and a scaling matrix $S$:
+                \begin{gather}
+                D' = T \cdot D \\
+                T = R \cdot S \\
+                \text{with} \
+                R = 
+                \begin{pmatrix}
+                \cos(\theta) & -\sin(\theta) \\ \sin(\theta) & \cos(\theta)
+                \end{pmatrix}
+                \ \text{and} \
+                S = 
+                \begin{pmatrix}
+                \alpha_1 & 0 \\
+                0 & \alpha_2
+                \end{pmatrix}
+                \end{gather}
+                Now, if we compute the covariance matrix $C$ of $D$, thanks to the spectral theorem, we can rewrite it as:
+                \begin{gather}
+                C = A B A^{-1} \\
+                \text{with B =} 
+                \begin{pmatrix}
+                \lambda_1 & 0 & 0 \\
+                0 & \ddots & 0 \\
+                0 & 0 & \lambda_n
+                \end{pmatrix}
+                \end{gather}
+                Thanks to our previous knowledge, we can intuitively see the link between $C$ and $T$ being that :
+                \begin{gather}
+                C = R \cdot \sqrt{S} \cdot R^{-1} \\
+                \small{A = R, \ B = \sqrt{S}}
+                \end{gather}
+                Add explanation pictures
+                <span style="font-style:italic;color:#3d3d3d">The square root comes from analysing examples of distributions where covariance was null.</span>
+                <p>
+                    Therefore, we can simply compute the transformation matrix $T$ by finding $C$ eigenvalues and eigenvectors (using an SVD algorithm from instance) to then construct $R$ and $S$ according to their new definition.
+                </p>
+                <p>
+                    In a nutsheel, $C$ is not properly speaking the matrix "that shift any circle distribution into the distribution it's defined from", but it's the matrix from which we can derive the transformation matrix $T$.
+                </p>
+            </div>
+            <p style="padding-top:25px">
+                Thus the eigenvectors of the covariance matrix give us the axis along which the transformation happens also called direction (because \(C_{X,Y}\) is a real symmetric matrix).
+            </p>
+            <span style="font-family: Roboto;font-size:18px;font-weight:400;display: flex;justify-content: center;padding-top: 15px;">↓ Draw a filled shape to find its direction ↓</span>
+            <div style="align-items: center;display: flex;flex-direction:column;padding:15px">
+                <div id="drawing_script"></div>
+                <button style="margin-top:10px" id="reset_canvas" onclick="reset_canvas_boolean = true">Reset canvas</button>
+            </div>
+        </div>
+
+        <div class="conclusion_wrapper">
+            <h2>Conclusion</h2>
+        </div>
+</body>
+</html>
