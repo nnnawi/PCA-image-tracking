@@ -12,7 +12,7 @@ The project is presented as a **fully interactive website** built with **HTML, C
 - 🔍 **Practical applications** of PCA for object tracking in images.
 
 ## 🖥️ Live Demo
-🚀 **Try it out here:** [Link To Website](nnnawi.github.io/PCA-image-tracking/)
+🚀 **Try it out here:** [Link To Website](https://nnnawi.github.io/PCA-image-tracking/)
 
 ## 📌 How It Works
 1. **Mathematical Foundations** 🧮  
